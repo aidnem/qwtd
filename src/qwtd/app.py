@@ -7,6 +7,7 @@ from prompt_toolkit import Application
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.completion import FuzzyCompleter, WordCompleter
 from prompt_toolkit.enums import EditingMode
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.layout import (
     BufferControl,
@@ -22,21 +23,14 @@ from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame, TextArea
 
+from qwtd.editor import Editor
 from qwtd.status_bar import StatusBar
 
 
 kb = KeyBindings()
 
 
-@kb.add("c-d")
-def _(event: KeyPressEvent):
-    """
-    Exit app when c-d is pressed
-    """
-    event.app.exit()
-
-
-def run_app(connection: Connection, cursor: Cursor):
+def run_app(connection: Connection):
     """
     Create and run the TUI App
     """
@@ -52,8 +46,12 @@ def run_app(connection: Connection, cursor: Cursor):
         ]
     )
 
+    res = connection.execute("SELECT name FROM notes")
+
     note_name_buff = Buffer(
-        completer=FuzzyCompleter(WordCompleter(["my_note", "gains"], sentence=True)),
+        completer=FuzzyCompleter(
+            WordCompleter([tup[0] for tup in res.fetchall()], sentence=True)
+        ),
         complete_while_typing=True,
         multiline=False,
     )
@@ -90,21 +88,22 @@ def run_app(connection: Connection, cursor: Cursor):
         # refresh_interval=0.1,
     )
 
-    @kb.add("enter")
+    editor: Editor = Editor(connection, text_area)
+
+    @kb.add("enter", filter=Condition(lambda: app.layout.has_focus(note_selector)))
     def _(event: KeyPressEvent):
         """
         Exit the note selector and confirm selection when enter is pressed
         """
-        if app.layout.has_focus(note_selector):
-            root_container.floats = []
+        root_container.floats = []
 
-            text_area.buffer.text = "# " + note_name_buff.text + "\n\n"
-            text_area.control.move_cursor_down()
-            text_area.control.move_cursor_down()
+        editor.open_note(note_name_buff.text)
 
-            app.layout.focus(text_area)
+        app.layout.focus(text_area)
 
-            app.invalidate()
+        app.invalidate()
+
+    editor.add_bindings(kb)
 
     def pre_run():
         """

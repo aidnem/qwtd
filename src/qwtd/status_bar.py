@@ -18,7 +18,9 @@ class StatusBar(FormattedTextToolbar):
                 ("class:keys", "Ctrl+E"),
                 ("", ": Export | "),
                 ("class:keys", "Ctrl+D"),
-                ("", ": Exit"),
+                ("", ": Save & Exit | "),
+                ("class:keys", "Ctrl+A"),
+                ("", ": Abandon"),
             ]
 
         super(StatusBar, self).__init__(get_text)

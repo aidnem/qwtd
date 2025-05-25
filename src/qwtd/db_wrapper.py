@@ -9,21 +9,24 @@ from qwtd import app
 
 
 def run_with_db():
+    """
+    Open a connection to the database, run the app, and close connection when done
+    """
+
     db_path = os.path.join(os.path.expanduser("~"), "qwtd.db")
     print(f"[QWTD] Opening database at {db_path}")
 
     connection = sqlite3.connect(db_path)
-    cursor = connection.cursor()
 
     try:
         # Ensure that table exists
-        cursor.execute(
+        connection.execute(
             """
-            CREATE TABLE IF NOT EXISTS notes(name, content, date_modified)
+            CREATE TABLE IF NOT EXISTS notes(name TEXT PRIMARY KEY, content TEXT, date_modified TIMESTAMP)
             """
         )
 
         # Launch app
-        app.run_app(connection, cursor)
+        app.run_app(connection)
     finally:
         connection.close()
