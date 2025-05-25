@@ -2,6 +2,6 @@
 Make python -m qwtd an alias for running `qwtd`
 """
 
-from .app import run
+from .db_wrapper import run_with_db
 
-run()
+run_with_db()

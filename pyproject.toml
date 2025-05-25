@@ -11,4 +11,4 @@ requires = ["uv_build>=0.7.8,<0.8.0"]
 build-backend = "uv_build"
 
 [project.scripts]
-qwtd = "qwtd.app:run"
+qwtd = "qwtd.db_wrapper:run_with_db"

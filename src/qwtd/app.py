@@ -2,6 +2,7 @@
 Manages the top level of the qwtd app through prompt_toolkit
 """
 
+from sqlite3 import Connection, Cursor
 from prompt_toolkit import Application
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.completion import FuzzyCompleter, WordCompleter
@@ -35,7 +36,7 @@ def _(event: KeyPressEvent):
     event.app.exit()
 
 
-def run():
+def run_app(connection: Connection, cursor: Cursor):
     """
     Create and run the TUI App
     """
