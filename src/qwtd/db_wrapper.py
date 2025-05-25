@@ -29,4 +29,5 @@ def run_with_db():
         # Launch app
         app.run_app(connection)
     finally:
+        print("[QWTD] Closing db connection.")
         connection.close()

@@ -28,6 +28,7 @@ class Editor:
         self.text_area: TextArea = text_area
 
         self.current_note: str | None = None
+        self.last_saved_content: str = ""
 
     def open_note(self, note_name: str):
         """
@@ -50,6 +51,7 @@ class Editor:
             self.text_area.control.move_cursor_down()
 
         self.current_note = note_name
+        self.last_saved_content = self.text_area.buffer.text
 
     def write(self):
         """
@@ -72,7 +74,15 @@ class Editor:
             data,
         )
 
+        self.last_saved_content = self.text_area.text
         self.connection.commit()
+
+    def unsaved(self) -> bool:
+        """
+        Check whether there are unsaved changes
+        """
+
+        return self.last_saved_content != self.text_area.text
 
     def add_bindings(self, kb: KeyBindings):
         """
@@ -97,4 +107,13 @@ class Editor:
             """
 
             self.write()
+            event.app.exit()
+
+        @kb.add("c-a", "c-a", "c-a")
+        def _(event: KeyPressEvent):
+            """
+            Exit app when c-a is pressed thrice
+            """
+
+            self.connection.rollback()
             event.app.exit()
