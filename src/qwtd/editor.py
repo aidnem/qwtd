@@ -270,3 +270,16 @@ class Editor:
             """
 
             self.finish_export()
+
+        @kb.add(
+            "c-o",
+            filter=Condition(
+                lambda: self.current_note is not None and not self.unsaved()
+            ),
+        )
+        def _(event: KeyPressEvent):
+            """
+            Close note to open a new one when c-o is pressed
+            """
+
+            self.close(event.app)
