@@ -44,11 +44,11 @@ def run_app(connection: Connection):
         [
             TitleBar(editor),
             text_area,
-            StatusBar(),
+            StatusBar(editor),
         ]
     )
 
-    res = connection.execute("SELECT name FROM notes")
+    res = connection.execute("SELECT name FROM notes ORDER BY date_modified DESC")
 
     note_name_buff = Buffer(
         completer=FuzzyCompleter(
@@ -70,7 +70,7 @@ def run_app(connection: Connection):
         floats=[
             Float(Frame(note_selector, width=30, height=4)),
             Float(
-                CompletionsMenu(max_height=8, scroll_offset=1),
+                CompletionsMenu(scroll_offset=1),
                 xcursor=True,
                 ycursor=True,
             ),
@@ -119,5 +119,7 @@ def run_app(connection: Connection):
         """
 
         app.layout.focus(note_selector)
+
+        note_name_buff.start_completion(select_first=False)
 
     app.run(pre_run=pre_run)

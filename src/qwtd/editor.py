@@ -5,6 +5,7 @@ Class for handling the state of the text editor
 import datetime
 from sqlite3 import Connection, Cursor
 
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.widgets import TextArea
 
@@ -84,6 +85,56 @@ class Editor:
 
         return self.last_saved_content != self.text_area.text
 
+    def delete(self):
+        """
+        Delete the currently open note (rename it to Deleted)
+        """
+
+        # Delete last "recently deleted" note
+        self.connection.execute(
+            """
+            DELETE FROM notes WHERE name='Deleted'
+            """
+        )
+
+        self.connection.execute(
+            """
+            UPDATE notes
+            SET name = 'Deleted'
+            WHERE name = ?
+            """,
+            (self.current_note if self.current_note else "",),
+        )
+
+        self.connection.execute(
+            """
+            UPDATE last_deleted SET name = ?
+            """,
+            (self.current_note if self.current_note else "",),
+        )
+
+        self.connection.commit()
+
+    def restore(self):
+        """
+        Restore the deleted note to its previous location
+        """
+
+        last_deleted: str = self.connection.execute(
+            "SELECT * FROM last_deleted"
+        ).fetchone()[0]
+
+        self.connection.execute(
+            """
+            UPDATE notes
+            SET name = ?
+            WHERE name = 'Deleted'
+            """,
+            (last_deleted,),
+        )
+
+        self.connection.commit()
+
     def add_bindings(self, kb: KeyBindings):
         """
         Register editor keybindings
@@ -100,10 +151,10 @@ class Editor:
 
             self.write()
 
-        @kb.add("c-d")
+        @kb.add("c-q")
         def _(event: KeyPressEvent):
             """
-            Exit app when c-d is pressed
+            Exit app when c-q is pressed
             """
 
             self.write()
@@ -116,4 +167,25 @@ class Editor:
             """
 
             self.connection.rollback()
+            event.app.exit()
+
+        @kb.add("c-d", "c-d", "c-d")
+        def _(event: KeyPressEvent):
+            """
+            Delete the note when c-d is pressed thrice
+            """
+
+            self.delete()
+            self.connection.commit()
+            event.app.exit()
+
+        @kb.add("c-r", filter=Condition(lambda: self.current_note == "Deleted"))
+        def _(event: KeyPressEvent):
+            """
+            Restore the note when c-r is pressed in Deleted
+            """
+
+            self.restore()
+            self.connection.commit()
+            print("[QWTD] Restored note.")
             event.app.exit()

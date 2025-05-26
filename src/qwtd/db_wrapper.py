@@ -26,6 +26,21 @@ def run_with_db():
             """
         )
 
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS last_deleted(name TEXT)
+            """
+        )
+
+        if len(connection.execute("SELECT * FROM last_deleted").fetchall()) == 0:
+            connection.execute(
+                """
+                INSERT INTO last_deleted(name) VALUES('Deleted')
+                """
+            )
+
+        connection.commit()
+
         # Launch app
         app.run_app(connection)
     finally:
