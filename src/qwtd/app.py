@@ -139,11 +139,13 @@ def run_app(connection: Connection):
 
     style = Style(
         [
-            ("info", "fg:ansigreen"),
+            ("info", "fg:#41a6b5"),
             ("keys", "reverse"),
             ("titlebar", "bg:white fg:black"),
             ("titlebar-unsaved", "bg:white fg:ansired"),
             ("pygments.generic.heading", "bold fg:#ffaa00"),
+            ("completion-menu.completion", "bg:#3d59a1 #a9b1d6"),
+            ("completion-menu.completion.current", "#394b70 bg:#a9b1d6"),
         ]
     )
 

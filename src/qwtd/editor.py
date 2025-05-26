@@ -111,7 +111,10 @@ class Editor:
         Check whether there are unsaved changes
         """
 
-        return self.last_saved_content != self.text_area.text
+        return (
+            self.current_note is not None
+            and self.last_saved_content != self.text_area.text
+        )
 
     def delete(self):
         """
