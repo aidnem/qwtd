@@ -3,8 +3,12 @@ Class for handling the state of the text editor
 """
 
 import datetime
+import os
 from sqlite3 import Connection, Cursor
 
+from prompt_toolkit import Application
+from prompt_toolkit.buffer import Buffer
+from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.widgets import TextArea
@@ -15,7 +19,14 @@ class Editor:
     Handles state of the editor, reading, writing, and keyboard shortcuts
     """
 
-    def __init__(self, connection: Connection, text_area: TextArea):
+    def __init__(
+        self,
+        connection: Connection,
+        text_area: TextArea,
+        note_name_buff: Buffer,
+        note_name_completer: WordCompleter,
+        export_buff: Buffer,
+    ):
         """
         Create a new Editor
 
@@ -27,9 +38,26 @@ class Editor:
 
         self.connection: Connection = connection
         self.text_area: TextArea = text_area
+        self.note_name_buff: Buffer = note_name_buff
+        self.note_name_completer: WordCompleter = note_name_completer
+        self.export_buff: Buffer = export_buff
 
         self.current_note: str | None = None
         self.last_saved_content: str = ""
+
+        # Should the export dialog be open currently?
+        self.is_exporting: bool = False
+
+    def update_name_completer(self):
+        """
+        Update the list of note names in the note name completer from the database
+        """
+
+        res = self.connection.execute(
+            "SELECT name FROM notes ORDER BY date_modified DESC"
+        )
+
+        self.note_name_completer.words = [tup[0] for tup in res.fetchall()]
 
     def open_note(self, note_name: str):
         """
@@ -135,6 +163,39 @@ class Editor:
 
         self.connection.commit()
 
+    def start_export(self):
+        """
+        Start an export (open the export menu)
+        """
+        self.is_exporting = True
+
+    def finish_export(self):
+        """
+        Finish an export (write the file to disk)
+        """
+        self.is_exporting = False
+
+        if os.path.exists(self.export_buff.text):
+            print(f"[QWTD] Error: File {self.export_buff.text} already exists.")
+            return
+
+        with open(self.export_buff.text, "w+", encoding="utf-8") as file:
+            file.write(self.text_area.text)
+
+    def close(self, app: Application):
+        """
+        Close the current note, prompting the user for a new one
+        """
+
+        self.current_note = None
+        self.note_name_buff.text = ""
+        self.text_area.text = " * in limbo (no note selected) *"
+
+        self.update_name_completer()
+
+        app.layout.focus(self.note_name_buff)
+        self.note_name_buff.start_completion(select_first=False)
+
     def add_bindings(self, kb: KeyBindings):
         """
         Register editor keybindings
@@ -177,7 +238,8 @@ class Editor:
 
             self.delete()
             self.connection.commit()
-            event.app.exit()
+
+            self.close(event.app)
 
         @kb.add("c-r", filter=Condition(lambda: self.current_note == "Deleted"))
         def _(event: KeyPressEvent):
@@ -188,4 +250,23 @@ class Editor:
             self.restore()
             self.connection.commit()
             print("[QWTD] Restored note.")
-            event.app.exit()
+
+            self.close(event.app)
+
+        @kb.add("c-e")
+        def _(event: KeyPressEvent):
+            """
+            Export when c-e is pressed
+            """
+
+            self.start_export()
+
+            event.app.layout.focus(self.export_buff)
+
+        @kb.add("enter", filter=Condition(lambda: self.is_exporting))
+        def _(event: KeyPressEvent):
+            """
+            Finish export when enter is pressed
+            """
+
+            self.finish_export()

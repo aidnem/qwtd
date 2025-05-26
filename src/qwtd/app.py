@@ -5,7 +5,7 @@ Manages the top level of the qwtd app through prompt_toolkit
 from sqlite3 import Connection
 from prompt_toolkit import Application
 from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.completion import FuzzyCompleter, WordCompleter
+from prompt_toolkit.completion import FuzzyCompleter, PathCompleter, WordCompleter
 from prompt_toolkit.cursor_shapes import CursorShape
 from prompt_toolkit.enums import EditingMode
 from prompt_toolkit.filters import Condition
@@ -13,16 +13,20 @@ from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.layout import (
     BufferControl,
     CompletionsMenu,
+    ConditionalContainer,
     Float,
     FloatContainer,
     FormattedTextControl,
     HSplit,
-    VSplit,
     Window,
 )
 from prompt_toolkit.layout.layout import Layout
-from prompt_toolkit.styles import Style
+from prompt_toolkit.lexers import PygmentsLexer
+from pygments.lexers.markup import MarkdownLexer
+from prompt_toolkit.styles import Style, merge_styles
 from prompt_toolkit.widgets import Frame, TextArea
+from prompt_toolkit.styles.pygments import style_from_pygments_cls
+from pygments.styles import get_style_by_name
 
 from qwtd.editor import Editor
 from qwtd.status_bar import StatusBar
@@ -36,9 +40,32 @@ def run_app(connection: Connection):
     """
     Create and run the TUI App
     """
-    text_area = TextArea(line_numbers=True, scrollbar=True)
 
-    editor: Editor = Editor(connection, text_area)
+    text_area = TextArea(
+        line_numbers=True,
+        scrollbar=True,
+        lexer=PygmentsLexer(MarkdownLexer),
+    )
+
+    note_name_completer = WordCompleter([], sentence=True)
+
+    note_name_buff = Buffer(
+        completer=FuzzyCompleter(note_name_completer),
+        complete_while_typing=True,
+        multiline=False,
+    )
+
+    export_buff = Buffer(
+        completer=PathCompleter(only_directories=True),
+        complete_while_typing=True,
+        multiline=False,
+    )
+
+    editor: Editor = Editor(
+        connection, text_area, note_name_buff, note_name_completer, export_buff
+    )
+
+    editor.update_name_completer()
 
     editing_body = HSplit(
         [
@@ -48,27 +75,58 @@ def run_app(connection: Connection):
         ]
     )
 
-    res = connection.execute("SELECT name FROM notes ORDER BY date_modified DESC")
+    note_select_kb = KeyBindings()
 
-    note_name_buff = Buffer(
-        completer=FuzzyCompleter(
-            WordCompleter([tup[0] for tup in res.fetchall()], sentence=True)
+    @note_select_kb.add("enter")
+    def _(event: KeyPressEvent):
+        """
+        Exit the note selector and confirm selection when enter is pressed
+        """
+        editor.open_note(note_name_buff.text)
+
+        app.layout.focus(text_area)
+
+        app.invalidate()
+
+    note_selector = ConditionalContainer(
+        Frame(
+            HSplit(
+                [
+                    Window(FormattedTextControl("Select note:", style="class:info")),
+                    Window(
+                        BufferControl(
+                            note_name_buff,
+                            key_bindings=note_select_kb,
+                        ),
+                        height=1,
+                    ),
+                ]
+            ),
+            width=30,
+            height=4,
         ),
-        complete_while_typing=True,
-        multiline=False,
+        Condition(lambda: editor.current_note is None),
     )
 
-    note_selector = HSplit(
-        [
-            Window(FormattedTextControl("Select note:", style="class:info")),
-            Window(BufferControl(note_name_buff), height=1),
-        ]
+    export_selector = ConditionalContainer(
+        Frame(
+            HSplit(
+                [
+                    Window(FormattedTextControl("Export path:", style="class:info")),
+                    Window(BufferControl(export_buff), height=1),
+                ]
+            ),
+            width=30,
+            height=4,
+        ),
+        Condition(lambda: editor.is_exporting),
     )
 
     root_container = FloatContainer(
         editing_body,
         floats=[
-            Float(Frame(note_selector, width=30, height=4)),
+            Float(note_selector),
+            Float(export_selector),
             Float(
                 CompletionsMenu(scroll_offset=1),
                 xcursor=True,
@@ -85,6 +143,7 @@ def run_app(connection: Connection):
             ("keys", "reverse"),
             ("titlebar", "bg:white fg:black"),
             ("titlebar-unsaved", "bg:white fg:ansired"),
+            ("pygments.generic.heading", "bold fg:#ffaa00"),
         ]
     )
 
@@ -97,19 +156,6 @@ def run_app(connection: Connection):
         cursor=CursorShape.BLINKING_BLOCK,
         # refresh_interval=0.1,
     )
-
-    @kb.add("enter", filter=Condition(lambda: app.layout.has_focus(note_selector)))
-    def _(event: KeyPressEvent):
-        """
-        Exit the note selector and confirm selection when enter is pressed
-        """
-        root_container.floats = []
-
-        editor.open_note(note_name_buff.text)
-
-        app.layout.focus(text_area)
-
-        app.invalidate()
 
     editor.add_bindings(kb)
 
