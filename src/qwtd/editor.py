@@ -7,10 +7,13 @@ import os
 from sqlite3 import Connection, Cursor
 
 from prompt_toolkit import Application
+from prompt_toolkit.application import get_app
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+from prompt_toolkit.key_binding.vi_state import InputMode
+from prompt_toolkit.layout import UIControl
 from prompt_toolkit.widgets import TextArea
 
 
@@ -42,11 +45,31 @@ class Editor:
         self.note_name_completer: WordCompleter = note_name_completer
         self.export_buff: Buffer = export_buff
 
+        def handle_command(buff: Buffer) -> bool:
+            """
+            Handle when enter is pressed in the command line
+            """
+
+            self.handle_command(buff.text)
+
+            get_app().layout.focus(self.last_focused)
+            get_app().vi_state.input_mode = InputMode.NAVIGATION
+
+            # Always return false to reset the command buffer
+            return False
+
+        self.command_buff: Buffer = Buffer(
+            accept_handler=handle_command,
+            multiline=False,
+        )
+
         self.current_note: str | None = None
         self.last_saved_content: str = ""
 
         # Should the export dialog be open currently?
         self.is_exporting: bool = False
+
+        self.last_focused: UIControl = self.text_area.control
 
     def update_name_completer(self):
         """
@@ -81,6 +104,8 @@ class Editor:
 
         self.current_note = note_name
         self.last_saved_content = self.text_area.buffer.text
+
+        get_app().vi_state.input_mode = InputMode.NAVIGATION
 
     def write(self):
         """
@@ -199,6 +224,41 @@ class Editor:
         app.layout.focus(self.note_name_buff)
         self.note_name_buff.start_completion(select_first=False)
 
+    def save_and_exit(self, app: Application):
+        """
+        Save the note and quit the app
+        """
+
+        self.write()
+        app.exit()
+
+    def exit_without_saving(self, app: Application):
+        """
+        Quit the app without saving, rolling back the db
+        """
+
+        self.connection.rollback()
+        app.exit()
+
+    def handle_command(self, command: str):
+        """
+        Handle a command from the command line input
+        """
+
+        command_chars: list[str] = list(reversed(command))
+
+        while len(command_chars) > 0:
+            c = command_chars.pop()
+
+            if c == "w":
+                self.write()
+            elif c == "q":
+                if self.unsaved() and len(command_chars):
+                    if command_chars.pop() == "!":
+                        self.exit_without_saving(get_app())
+                elif not self.unsaved():
+                    get_app().exit()
+
     def add_bindings(self, kb: KeyBindings):
         """
         Register editor keybindings
@@ -221,8 +281,7 @@ class Editor:
             Exit app when c-q is pressed
             """
 
-            self.write()
-            event.app.exit()
+            self.save_and_exit(event.app)
 
         @kb.add("c-a", "c-a", "c-a")
         def _(event: KeyPressEvent):
@@ -230,8 +289,7 @@ class Editor:
             Exit app when c-a is pressed thrice
             """
 
-            self.connection.rollback()
-            event.app.exit()
+            self.exit_without_saving(event.app)
 
         @kb.add("c-d", "c-d", "c-d")
         def _(event: KeyPressEvent):
@@ -286,3 +344,20 @@ class Editor:
             """
 
             self.close(event.app)
+
+        @kb.add(
+            ":",
+            filter=Condition(
+                lambda: get_app().vi_state.input_mode == InputMode.NAVIGATION
+            ),
+        )
+        def _(event: KeyPressEvent):
+            """
+            Open the command line when : is pressed in normal mode
+            """
+
+            # Keep track of where we were
+            self.last_focused = event.app.layout.current_control
+
+            event.app.layout.focus(self.command_buff)
+            event.app.vi_state.input_mode = InputMode.INSERT

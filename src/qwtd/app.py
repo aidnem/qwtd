@@ -10,6 +10,7 @@ from prompt_toolkit.cursor_shapes import CursorShape
 from prompt_toolkit.enums import EditingMode
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+from prompt_toolkit.key_binding.vi_state import InputMode
 from prompt_toolkit.layout import (
     BufferControl,
     CompletionsMenu,
@@ -23,13 +24,11 @@ from prompt_toolkit.layout import (
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.lexers import PygmentsLexer
 from pygments.lexers.markup import MarkdownLexer
-from prompt_toolkit.styles import Style, merge_styles
+from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame, TextArea
-from prompt_toolkit.styles.pygments import style_from_pygments_cls
-from pygments.styles import get_style_by_name
 
 from qwtd.editor import Editor
-from qwtd.status_bar import StatusBar
+from qwtd.status_bar import status_bar
 from qwtd.titlebar import TitleBar
 
 
@@ -71,7 +70,7 @@ def run_app(connection: Connection):
         [
             TitleBar(editor),
             text_area,
-            StatusBar(editor),
+            status_bar(editor),
         ]
     )
 
@@ -167,6 +166,7 @@ def run_app(connection: Connection):
         """
 
         app.layout.focus(note_selector)
+        app.vi_state.input_mode = InputMode.INSERT
 
         note_name_buff.start_completion(select_first=False)
 

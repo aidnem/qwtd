@@ -1,11 +1,8 @@
-from ctypes import alignment
 from prompt_toolkit.layout import (
-    ConditionalContainer,
     FormattedTextControl,
     Window,
     WindowAlign,
 )
-from prompt_toolkit.widgets import FormattedTextToolbar
 
 from qwtd.editor import Editor
 
