@@ -2,10 +2,10 @@
 Wrapper around TUI app to ensure the proper closing of the database.
 """
 
-import os
 import sqlite3
 
 from qwtd import app
+from qwtd import config
 
 
 def run_with_db():
@@ -13,7 +13,7 @@ def run_with_db():
     Open a connection to the database, run the app, and close connection when done
     """
 
-    db_path = os.path.join(os.path.expanduser("~"), "qwtd.db")
+    db_path = config.get_db_path()
     print(f"[QWTD] Opening database at {db_path}")
 
     connection = sqlite3.connect(db_path)
