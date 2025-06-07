@@ -6,6 +6,7 @@ from prompt_toolkit.layout import (
     VSplit,
     Window,
 )
+from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.layout.processors import BeforeInput
 from prompt_toolkit.widgets import FormattedTextToolbar
 
@@ -59,6 +60,12 @@ def status_bar(editor: Editor) -> VSplit:
     Layout for the status bar to show vi mode and keyboard shortcuts
     """
 
+    command_keybindings: KeyBindings = KeyBindings()
+
+    @command_keybindings.add("escape")
+    def _(e: KeyPressEvent):
+        editor.cancel_command()
+
     return VSplit(
         [
             ConditionalContainer(
@@ -70,7 +77,9 @@ def status_bar(editor: Editor) -> VSplit:
             ConditionalContainer(
                 Window(
                     BufferControl(
-                        buffer=editor.command_buff, input_processors=[BeforeInput(":")]
+                        buffer=editor.command_buff,
+                        input_processors=[BeforeInput(":")],
+                        key_bindings=command_keybindings,
                     ),
                     height=1,
                 ),

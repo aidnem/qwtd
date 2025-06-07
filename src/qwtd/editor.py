@@ -305,6 +305,14 @@ class Editor:
                 elif not self.unsaved():
                     get_app().exit()
 
+    def cancel_command(self):
+        """
+        Cancel the command and close the command line
+        """
+
+        get_app().layout.focus(self.last_focused)
+        get_app().vi_state.input_mode = InputMode.NAVIGATION
+
     def add_bindings(self, kb: KeyBindings):
         """
         Register editor keybindings
