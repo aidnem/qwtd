@@ -42,12 +42,15 @@ These commands can be composed: `:wq<Enter>` would save the note and quit.
 
 ### Deleting and restoring notes
 
-The currently open note can be deleted with `Ctrl-D`. This will move the note to
-the special `Deleted` note. To restore a note that's been deleted, press
-`Ctrl-O` (or restart `qwtd`), open `Deleted`, and press `Ctrl-R` to restore it.
+The currently open note can be deleted with `Ctrl-D`. This will schedule the
+note's permanent deletion 7 days ([configurable](#customizing-deletion-time))
+from the time of initial deletion. To restore a note that's been deleted, open
+the note (press `Ctrl+O` or restart QWTD) and then press `Ctrl-R` to restore it.
 
-_Note_: A deleted note is stored temporarily under `Deleted`, but will be
-permanently lost when the next note is deleted, as it will be overwritten.
+_Note_: Notes scheduled for deletion that have expired are permanently deleted
+the next time the app is opened. QWTD removes all notes that are deleted and
+have passed their expiration date on startup, immediately after initializing/
+upgrading the database to the latest schema.
 
 ### Exporting
 
@@ -66,4 +69,16 @@ store their notes in the sync folder. This could be accomplished like so:
 
 ```toml
 db = "~/Sync/qwtd.db"
+```
+
+### Customizing deletion time
+
+After a note is deleted, it will be scheduled to permanently deleted. By
+default, this is scheduled for 7 days after the time of initial deletion.
+However, this can be configured with the `days_to_delete` field of the config.
+
+This value accepts ints or floats:
+
+```toml
+days_to_delete = 7
 ```

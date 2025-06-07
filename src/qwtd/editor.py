@@ -2,8 +2,8 @@
 Class for handling the state of the text editor
 """
 
-import datetime
 import os
+from datetime import datetime
 from sqlite3 import Connection, Cursor
 
 from prompt_toolkit import Application
@@ -11,10 +11,14 @@ from prompt_toolkit.application import get_app
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.filters import Condition
+from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.key_binding.vi_state import InputMode
 from prompt_toolkit.layout import UIControl
 from prompt_toolkit.widgets import TextArea
+
+from qwtd import config
+from qwtd import dateutils
 
 
 class Editor:
@@ -63,24 +67,74 @@ class Editor:
             multiline=False,
         )
 
+        self.current_note_deleted: bool = False
         self.current_note: str | None = None
         self.last_saved_content: str = ""
+        self.current_expiration: datetime = datetime.now()
 
         # Should the export dialog be open currently?
         self.is_exporting: bool = False
 
         self.last_focused: UIControl = self.text_area.control
 
-    def update_name_completer(self):
+    def update_name_completer(self) -> None:
         """
         Update the list of note names in the note name completer from the database
         """
 
         res = self.connection.execute(
-            "SELECT name FROM notes ORDER BY date_modified DESC"
+            """
+            SELECT
+                name,
+                date_modified,
+                deleted,
+                expires
+            FROM notes ORDER BY date_modified DESC
+            """
         )
 
-        self.note_name_completer.words = [tup[0] for tup in res.fetchall()]
+        notes = res.fetchall()
+        self.note_name_completer.words = [tup[0] for tup in notes]
+
+        # Track the longest name to make the completions menu a constant width
+        name_col_width = max([len(tup[0]) for tup in notes])
+
+        self.note_name_completer.display_dict = {}
+        for note in notes:
+            name: str
+            date_modified: datetime
+            deleted: int
+            expires: datetime
+
+            name, date_modified, deleted, expires = note
+            if deleted == 1:
+                self.note_name_completer.display_dict[name] = FormattedText(
+                    [
+                        (
+                            "class:completion-menu.completion",
+                            name.ljust(name_col_width + 1),
+                        ),
+                        (
+                            "class:completion-menu.completion fg:ansired",
+                            f"Deleted - expires {
+                                expires.strftime('%Y-%m-%d %H:%M:%S')
+                            } ({(dateutils.fmtdelta(expires - datetime.now()))})",
+                        ),
+                    ]
+                )
+            else:
+                self.note_name_completer.display_dict[name] = FormattedText(
+                    [
+                        (
+                            "class:completion-menu.completion",
+                            name.ljust(name_col_width + 1),
+                        ),
+                        (
+                            "class:completion-menu.completion",
+                            f"Modified {date_modified.strftime('%Y-%m-%d %H:%M:%S')}",
+                        ),
+                    ]
+                )
 
     def open_note(self, note_name: str):
         """
@@ -89,14 +143,18 @@ class Editor:
 
         cursor: Cursor = self.connection.execute(
             """
-            SELECT content FROM notes WHERE name=?
+            SELECT content, deleted, expires FROM notes WHERE name=?
             """,
             (note_name,),
         )
 
-        result: tuple[str] | None = cursor.fetchone()
+        self.current_note_deleted = False
+
+        result: tuple[str, int, datetime] | None = cursor.fetchone()
         if result:
             self.text_area.buffer.text = result[0]
+            self.current_note_deleted = result[1] != 0
+            self.current_expiration = result[2]
         else:
             self.text_area.buffer.text = f"# {note_name}\n\n"
             self.text_area.control.move_cursor_down()
@@ -117,13 +175,14 @@ class Editor:
         data = {
             "name": self.current_note,
             "content": self.text_area.text,
-            "date_modified": datetime.datetime.now(),
+            "date_modified": datetime.now(),
         }
 
         self.connection.execute(
             """
-            INSERT OR REPLACE INTO notes (name, content, date_modified)
-                VALUES(:name, :content, :date_modified)
+            INSERT OR REPLACE
+            INTO notes (name, content, date_modified, deleted, expires)
+            VALUES(:name, :content, :date_modified, 0, :date_modified)
             """,
             data,
         )
@@ -143,30 +202,20 @@ class Editor:
 
     def delete(self):
         """
-        Delete the currently open note (rename it to Deleted)
+        Delete the currently open note (set it to deleted and add expiration)
         """
-
-        # Delete last "recently deleted" note
-        self.connection.execute(
-            """
-            DELETE FROM notes WHERE name='Deleted'
-            """
-        )
 
         self.connection.execute(
             """
             UPDATE notes
-            SET name = 'Deleted'
+            SET deleted = 1,
+                expires = ?
             WHERE name = ?
             """,
-            (self.current_note if self.current_note else "",),
-        )
-
-        self.connection.execute(
-            """
-            UPDATE last_deleted SET name = ?
-            """,
-            (self.current_note if self.current_note else "",),
+            (
+                config.generate_expiration(),
+                self.current_note if self.current_note else "",
+            ),
         )
 
         self.connection.commit()
@@ -176,17 +225,13 @@ class Editor:
         Restore the deleted note to its previous location
         """
 
-        last_deleted: str = self.connection.execute(
-            "SELECT * FROM last_deleted"
-        ).fetchone()[0]
-
         self.connection.execute(
             """
             UPDATE notes
-            SET name = ?
-            WHERE name = 'Deleted'
+            SET deleted = 0
+            WHERE name = ?
             """,
-            (last_deleted,),
+            (self.current_note if self.current_note else "",),
         )
 
         self.connection.commit()
@@ -216,6 +261,7 @@ class Editor:
         """
 
         self.current_note = None
+        self.current_note_deleted = False
         self.note_name_buff.text = ""
         self.text_area.text = " * in limbo (no note selected) *"
 
@@ -302,7 +348,7 @@ class Editor:
 
             self.close(event.app)
 
-        @kb.add("c-r", filter=Condition(lambda: self.current_note == "Deleted"))
+        @kb.add("c-r", filter=Condition(lambda: self.current_note_deleted))
         def _(event: KeyPressEvent):
             """
             Restore the note when c-r is pressed in Deleted
@@ -310,7 +356,7 @@ class Editor:
 
             self.restore()
             self.connection.commit()
-            print("[QWTD] Restored note.")
+            # print("[QWTD] Restored note.")
 
             self.close(event.app)
 

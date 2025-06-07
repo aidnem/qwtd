@@ -2,10 +2,19 @@
 Manage creation and loading of the ~/.config/qwtd.toml file
 """
 
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+import functools
 import os
 import tomllib
 
 TOMLPATH: str = "~/.config/qwtd.toml"
+
+
+@dataclass(frozen=True)
+class Config:
+    db: str = "~/.config/qwtd.toml"
+    days_to_delete: int | float = 7
 
 
 def get_toml_path() -> str:
@@ -26,10 +35,13 @@ def ensure_config_file():
         create_default_config()
 
 
-DEFAULT_CONFIG: str = """db = "~/qwtd.db"\n"""
+DEFAULT_CONFIG: str = """\
+db = "~/qwtd.db"\n\
+days_to_delete = 7\n
+"""
 
 
-def create_default_config():
+def create_default_config() -> None:
     """
     Create a default config at TOMLPATH
     """
@@ -41,15 +53,34 @@ def create_default_config():
         f.write(DEFAULT_CONFIG)
 
 
+@functools.cache
+def get_config() -> Config:
+    """
+    Load the config, or use a cached version if it has already been loaded
+    """
+    ensure_config_file()
+
+    with open(get_toml_path(), "rb") as f:
+        config = tomllib.load(f)
+
+    return Config(
+        **{key: value for key, value in config.items() if key in Config.__dict__.keys()}
+    )
+
+
 def get_db_path() -> str:
     """
     Read the config file and return the path to the db
     """
 
-    ensure_config_file()
+    config = get_config()
 
-    get_toml_path()
-    with open(get_toml_path(), "rb") as f:
-        config = tomllib.load(f)
+    return os.path.expanduser(config.db)
 
-    return os.path.expanduser(config["db"])
+
+def generate_expiration() -> datetime:
+    """
+    If a note is deleted at the time of function call, when should it expire?
+    """
+
+    return datetime.now() + timedelta(days=get_config().days_to_delete)

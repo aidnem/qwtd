@@ -148,7 +148,7 @@ def run_app(connection: Connection):
         ]
     )
 
-    app = Application(
+    app: Application = Application(
         layout=layout,
         key_bindings=kb,
         editing_mode=EditingMode.VI,

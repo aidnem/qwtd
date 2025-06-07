@@ -2,44 +2,33 @@
 Wrapper around TUI app to ensure the proper closing of the database.
 """
 
+import os
 import sqlite3
 
 from qwtd import app
 from qwtd import config
+from qwtd import db_setup
 
 
-def run_with_db():
+def run_with_db() -> None:
     """
     Open a connection to the database, run the app, and close connection when done
     """
 
     db_path = config.get_db_path()
+
+    first_open: bool = not os.path.exists(db_path)
+
     print(f"[QWTD] Opening database at {db_path}")
 
-    connection = sqlite3.connect(db_path)
+    connection = sqlite3.connect(
+        db_path, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
+    )
 
     try:
-        # Ensure that table exists
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS notes(name TEXT PRIMARY KEY, content TEXT, date_modified TIMESTAMP)
-            """
-        )
+        db_setup.ensure_db(connection, first_open)
 
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS last_deleted(name TEXT)
-            """
-        )
-
-        if len(connection.execute("SELECT * FROM last_deleted").fetchall()) == 0:
-            connection.execute(
-                """
-                INSERT INTO last_deleted(name) VALUES('Deleted')
-                """
-            )
-
-        connection.commit()
+        db_setup.delete_expired_notes(connection)
 
         # Launch app
         app.run_app(connection)

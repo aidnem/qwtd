@@ -29,7 +29,7 @@ class StandardStatusBar(FormattedTextToolbar):
                 ("", "|"),
             ]
 
-            if editor.current_note != "Deleted":
+            if not editor.current_note_deleted:
                 return vi_display + [
                     ("class:keys", "Ctrl+W"),
                     ("", ": Write|"),
